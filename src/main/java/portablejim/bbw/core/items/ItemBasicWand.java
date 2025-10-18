@@ -77,7 +77,7 @@ public abstract class ItemBasicWand extends Item implements IWandItem{
                 //FMLLog.info("Max blocks: %d (%d|%d", numBlocks, this.wand.getMaxBlocks(itemstack), playerShim.countItems(sourceItems));
                 LinkedList<Point3d> blocks = worker.getBlockPositionList(clickedPos, side, numBlocks, getMode(itemstack), getFaceLock(itemstack), getFluidMode(itemstack));
 
-                ArrayList<Point3d> placedBlocks = worker.placeBlocks(itemstack, blocks, sourceTriplet.target, sourceItems, side, hitX, hitY, hitZ);
+                ArrayList<Point3d> placedBlocks = worker.placeBlocks(itemstack, blocks, sourceTriplet.target, sourceTriplet.targetTE, sourceItems, side, hitX, hitY, hitZ);
                 if(placedBlocks.size() > 0) {
                     int[] placedIntArray = new int[placedBlocks.size() * 3];
                     for (int i = 0; i < placedBlocks.size(); i++) {

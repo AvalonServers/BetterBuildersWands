@@ -1,22 +1,25 @@
 package portablejim.bbw.core;
 
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockLiquid;
-import net.minecraft.block.BlockSlab;
+import net.minecraft.block.*;
+import net.minecraft.block.material.Material;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemBlock;
 import net.minecraft.item.ItemStack;
+import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.EnumFacing;
 import net.minecraft.util.EnumHand;
 import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.RayTraceResult;
+import net.minecraft.world.World;
 import net.minecraftforge.common.ForgeHooks;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.common.util.BlockSnapshot;
 import net.minecraftforge.event.world.BlockEvent;
 import net.minecraftforge.fluids.IFluidBlock;
+import net.minecraftforge.fml.common.Loader;
 import portablejim.bbw.BetterBuildersWandsMod;
 import portablejim.bbw.basics.EnumFluidLock;
 import portablejim.bbw.basics.EnumLock;
@@ -28,6 +31,9 @@ import portablejim.bbw.core.wands.IWand;
 import portablejim.bbw.shims.IPlayerShim;
 import portablejim.bbw.shims.IWorldShim;
 
+import com.elytradev.architecture.common.block.BlockArchitecture;
+
+import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -50,17 +56,28 @@ public class WandWorker {
         this.world = world;
     }
 
+    public boolean canDuplicateTEForBlock(Block block) {
+        if (Loader.isModLoaded("architecturecraft") && block instanceof BlockArchitecture) return true;
+        return false;
+    }
+
     public ReplacementTriplet getProperItemStack(IWorldShim world, IPlayerShim player, Point3d blockPos, float hitX, float hitY, float hitZ) {
+        World worldReal = world.getWorld();
         Block block = world.getBlock(blockPos);
-        IBlockState startBlockState = world.getWorld().getBlockState(blockPos.toBlockPos());
+        IBlockState startBlockState = worldReal.getBlockState(blockPos.toBlockPos());
         int meta = world.getMetadata(blockPos);
         String blockString = String.format("%s/%s", Block.REGISTRY.getNameForObject(block), meta);
+
+        NBTTagCompound teNBT = null;
+        TileEntity te = worldReal.getTileEntity(blockPos.toBlockPos());
+        if (te != null && canDuplicateTEForBlock(block)) teNBT = te.serializeNBT();
+
         if(!BetterBuildersWandsMod.instance.configValues.HARD_BLACKLIST_SET.contains(blockString)) {
             ArrayList<CustomMapping> customMappings = BetterBuildersWandsMod.instance.mappingManager.getMappings(block, meta);
             for (CustomMapping customMapping : customMappings) {
                 if(player.countItems(customMapping.getItems()) > 0) {
                     return new ReplacementTriplet(customMapping.getLookBlock().getStateFromMeta(customMapping.getMeta()),
-                            customMapping.getItems(), customMapping.getPlaceBlock().getStateFromMeta(customMapping.getPlaceMeta()));
+                            customMapping.getItems(), customMapping.getPlaceBlock().getStateFromMeta(customMapping.getPlaceMeta()), teNBT);
                 }
             }
 
@@ -69,7 +86,7 @@ public class WandWorker {
                 Item itemDropped = startBlockState.getBlock().getItemDropped(startBlockState, world.rand(), 0);
                 ItemStack itemStackDropped = new ItemStack(itemDropped, startBlockState.getBlock().quantityDropped(world.rand()), startBlockState.getBlock().damageDropped(startBlockState));
                 if(player.countItems(itemStackDropped) > 0) {
-                    return new ReplacementTriplet(startBlockState, itemStackDropped, startBlockState);
+                    return new ReplacementTriplet(startBlockState, itemStackDropped, startBlockState, teNBT);
                 }
             }
 
@@ -82,7 +99,7 @@ public class WandWorker {
                 if(exactItemstack.getItem() instanceof ItemBlock) {
                     //IBlockState newState = ((ItemBlock) exactItemstack.getItem()).getBlock().getStateFromMeta(exactItemstack.getMetadata());
                     IBlockState newState = ((ItemBlock)exactItemstack.getItem()).getBlock().getStateForPlacement(world.getWorld(), blockPos.toBlockPos(), player.getPlayer().getHorizontalFacing(), hitX, hitY, hitZ, meta, player.getPlayer(), EnumHand.MAIN_HAND);
-                    return new ReplacementTriplet(startBlockState, exactItemstack, newState);
+                    return new ReplacementTriplet(startBlockState, exactItemstack, newState, teNBT);
                 }
                 else {
                     return null;
@@ -94,18 +111,23 @@ public class WandWorker {
     }
 
     private ReplacementTriplet getEquivalentItemStack(Point3d blockPos) {
+        World worldReal = world.getWorld();
         Block block = world.getBlock(blockPos);
         int meta = world.getMetadata(blockPos);
-        IBlockState startBlockState = world.getWorld().getBlockState(blockPos.toBlockPos());
+        IBlockState startBlockState = worldReal.getBlockState(blockPos.toBlockPos());
         //ArrayList<ItemStack> items = new ArrayList<ItemStack>();
         String blockString = String.format("%s/%s", Block.REGISTRY.getNameForObject(block), meta);
+
+        NBTTagCompound teNBT = null;
+        TileEntity te = worldReal.getTileEntity(blockPos.toBlockPos());
+        if (te != null && canDuplicateTEForBlock(block)) teNBT = te.serializeNBT();
 
         if (!block.canSilkHarvest(world.getWorld(), blockPos.toBlockPos(), block.getStateFromMeta(meta), player.getPlayer())) {
             if(!BetterBuildersWandsMod.instance.configValues.SOFT_BLACKLIST_SET.contains(blockString)) {
                 Item dropped = block.getItemDropped(block.getStateFromMeta(meta), new Random(), 0);
                 ItemStack stack = new ItemStack(dropped, block.quantityDropped(block.getStateFromMeta(meta), 0, new Random()), block.damageDropped(block.getStateFromMeta(meta)));
                 if (stack.getItem() instanceof ItemBlock) {
-                    return new ReplacementTriplet(startBlockState, stack, ((ItemBlock) stack.getItem()).getBlock().getStateFromMeta(stack.getMetadata()));
+                    return new ReplacementTriplet(startBlockState, stack, ((ItemBlock) stack.getItem()).getBlock().getStateFromMeta(stack.getMetadata()), teNBT);
                 }
             }
         }
@@ -114,9 +136,14 @@ public class WandWorker {
     }
 
     private boolean shouldContinue(Point3d currentCandidate, Block targetBlock, int targetMetadata, EnumFacing facing, Block candidateSupportingBlock, int candidateSupportingMeta, AxisAlignedBB blockBB, EnumFluidLock fluidLock) {
+        BlockPos candidatePos = new BlockPos(currentCandidate.x, currentCandidate.y, currentCandidate.z);
         if(!world.blockIsAir(currentCandidate)){
             Block currrentCandidateBlock = world.getBlock(currentCandidate);
-            if(!(fluidLock == EnumFluidLock.IGNORE && currrentCandidateBlock != null && (currrentCandidateBlock instanceof IFluidBlock || currrentCandidateBlock instanceof BlockLiquid))) return false;
+            IBlockState state = world.getWorld().getBlockState(candidatePos);
+            Material material =  state.getMaterial();
+
+            boolean isEffectiveAir = currrentCandidateBlock instanceof BlockSnow || material == Material.PLANTS || material == Material.VINE;
+            if(!isEffectiveAir && !(fluidLock == EnumFluidLock.IGNORE && currrentCandidateBlock != null && (currrentCandidateBlock instanceof IFluidBlock || currrentCandidateBlock instanceof BlockLiquid))) return false;
         };
         /*if((FluidRegistry.getFluid("water").getBlock().equals(world.getBlock(currentCandidate)) || FluidRegistry.getFluid("lava").getBlock().equals(world.getBlock(currentCandidate)))
                 && world.getMetadata(currentCandidate) == 0){
@@ -125,8 +152,11 @@ public class WandWorker {
         if(!targetBlock.equals(candidateSupportingBlock)) return false;
         if(targetMetadata != candidateSupportingMeta) return false;
         //if(targetBlock instanceof BlockCrops) return false;
-        if(!targetBlock.canPlaceBlockAt(world.getWorld(), new BlockPos(currentCandidate.x, currentCandidate.y, currentCandidate.z))) return false;
-        if(!targetBlock.isReplaceable(world.getWorld(), new BlockPos(currentCandidate.x, currentCandidate.y, currentCandidate.z))) return false;
+
+        World realWorld = world.getWorld();
+
+        if(!targetBlock.canPlaceBlockAt(realWorld, candidatePos)) return false;
+        if(!targetBlock.isReplaceable(realWorld, candidatePos)) return false;
 
         return !world.entitiesInBox(blockBB);
 
@@ -228,16 +258,26 @@ public class WandWorker {
         return toPlace;
     }
 
-    public ArrayList<Point3d> placeBlocks(ItemStack wandItem, LinkedList<Point3d> blockPosList, IBlockState targetBlock, ItemStack sourceItems, EnumFacing side, float hitX, float hitY, float hitZ) {
+    public ArrayList<Point3d> placeBlocks(ItemStack wandItem, LinkedList<Point3d> blockPosList, IBlockState targetBlock, @Nullable NBTTagCompound targetTE, ItemStack sourceItems, EnumFacing side, float hitX, float hitY, float hitZ) {
+        World worldReal = world.getWorld();
         ArrayList<Point3d> placedBlocks = new ArrayList<>();
         EnumHand hand = player.getPlayer().getHeldItemMainhand().getItem() instanceof ItemBasicWand ? EnumHand.MAIN_HAND : EnumHand.OFF_HAND;
+
         for(Point3d blockPos : blockPosList) {
             boolean blockPlaceSuccess = false;
-            BlockSnapshot snapshot = new BlockSnapshot(world.getWorld(), blockPos.toBlockPos(), targetBlock);
+            BlockSnapshot snapshot = new BlockSnapshot(worldReal, blockPos.toBlockPos(), targetBlock);
             BlockEvent.PlaceEvent placeEvent = new BlockEvent.PlaceEvent(snapshot, targetBlock, player.getPlayer(), hand);
             MinecraftForge.EVENT_BUS.post(placeEvent);
             if(!placeEvent.isCanceled()) {
+                Block blockType = targetBlock.getBlock();
                 blockPlaceSuccess = world.setBlock(blockPos, targetBlock);
+                if (targetTE != null && blockType.hasTileEntity(targetBlock)) {
+                    TileEntity te = blockType.createTileEntity(worldReal, targetBlock);
+                    if (te != null) {
+                        te.deserializeNBT(targetTE);
+                        worldReal.setTileEntity(blockPos.toBlockPos(), te);
+                    }
+                }
             }
 
             if(blockPlaceSuccess) {
