@@ -4,6 +4,7 @@ import net.minecraft.block.Block;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.item.ItemStack;
+import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.util.EnumHand;
 import portablejim.bbw.BetterBuildersWandsMod;
 import portablejim.bbw.api.IContainerHandlerSpecial;
@@ -15,6 +16,7 @@ import vazkii.botania.api.item.IBlockProvider;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Wrap a player to provide basic functions.
@@ -62,7 +64,10 @@ public class BasicPlayerShim implements IPlayerShim {
         int meta = getBlockMeta(itemStack);
 
         for(ItemStack inventoryStack : player.inventory.mainInventory) {
-            if(inventoryStack != null && itemStack.isItemEqual(inventoryStack)) {
+            NBTTagCompound sourceNbt = itemStack.hasTagCompound() ? Objects.requireNonNull(itemStack.getTagCompound()) : new NBTTagCompound();
+            NBTTagCompound destNbt = inventoryStack.hasTagCompound() ? Objects.requireNonNull(inventoryStack.getTagCompound()) : new NBTTagCompound();
+
+            if(inventoryStack != null && itemStack.isItemEqual(inventoryStack) && sourceNbt.equals(destNbt)) {
                 total += Math.max(0, inventoryStack.getCount());
             }
             else {
